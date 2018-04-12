@@ -17,6 +17,7 @@ parser = argparse.ArgumentParser(description='MXNet Autograd RNN/LSTM Acoustic M
 parser.add_argument('model', help='trained model filename')
 parser.add_argument('--beam', type=int, default=0, help='apply beam search, beam width')
 parser.add_argument('--ctc', default=False, action='store_true', help='decode CTC acoustic model')
+parser.add_argument('--bi', default=False, action='store_true', help='bidirectional LSTM')
 parser.add_argument('--dataset', default='test', help='decoding data set')
 parser.add_argument('--out', type=str, default='', help='decoded result output dir')
 args = parser.parse_args()
@@ -27,7 +28,7 @@ logging.basicConfig(format='%(asctime)s: %(message)s', datefmt="%H:%M:%S", filen
 
 # Load model
 Model = RNNModel if args.ctc else Transducer
-model = Model(123, 49, 250, 3)
+model = Model(123, 49, 250, 3, bidirectional=args.bi)
 model.load_state_dict(torch.load(args.model, map_location='cpu'))
 
 # data set
@@ -40,8 +41,8 @@ with open('data/'+args.dataset+'/text', 'r') as f:
         label[line[0]] = line[1:]
 
 # Phone map
-with open('data/lang/phones.60-48-39.map', 'r') as f:
-    pmap = {0:0}
+with open('conf/phones.60-48-39.map', 'r') as f:
+    pmap = {'<eps>':'<eps>'}
     for line in f:
         line = line.split()
         if len(line) < 3: continue
@@ -75,6 +76,7 @@ def decode():
         err += e; cnt += len(t)
         logging.info('[{}]: {}'.format(k, ' '.join(t)))
         logging.info('[{}]: {}\nlog-likelihood: {:.2f}\n'.format(k, ' '.join(y), nll))
-    logging.info('{} set Transducer PER {:.2f}%\n'.format(args.dataset.capitalize(), 100*err/cnt))
+    logging.info('{} set {} PER {:.2f}%\n'.format(
+        args.dataset.capitalize(), 'CTC' if args.ctc else 'Transducer', 100*err/cnt))
 
 decode()
