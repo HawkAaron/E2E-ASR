@@ -6,13 +6,14 @@ import torch.nn.functional as F
 from transducer.functions import transducer
 
 class RNNModel(nn.Module):
-    def __init__(self, input_size, vocab_size, hidden_size, num_layers, dropout=.2, blank=0):
+    def __init__(self, input_size, vocab_size, hidden_size, num_layers, dropout=.2, blank=0, bidirectional=False):
         super(RNNModel, self).__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.blank = blank
         # lstm hidden vector: (h_0, c_0) num_layers * num_directions, batch, hidden_size
-        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=dropout)
+        self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=dropout, bidirectional=bidirectional)
+        if bidirectional: hidden_size *= 2
         self.linear = nn.Linear(hidden_size, vocab_size)
         self.init_weights()
 
@@ -91,35 +92,43 @@ class RNNModel(nn.Module):
 
 
 class Transducer(nn.Module):
-    def __init__(self, input_size, vocab_size, hidden_size, num_layers, dropout=.5, blank=0):
+    def __init__(self, input_size, vocab_size, hidden_size, num_layers, dropout=.5, blank=0, bidirectional=False):
         super(Transducer, self).__init__()
         self.blank = blank
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.loss = transducer.TransducerLoss(blank_label=0)
-        self.encoder = RNNModel(input_size, vocab_size, hidden_size, num_layers, dropout)
+        # NOTE encoder & decoder only use lstm
+        self.encoder = RNNModel(input_size, vocab_size, hidden_size, num_layers, dropout, bidirectional)
         self.embed = nn.Embedding(vocab_size, vocab_size-1, padding_idx=blank)
         self.embed.weight.data[1:] = torch.eye(vocab_size-1)
         self.embed.weight.requires_grad = False
         self.decoder = RNNModel(vocab_size-1, vocab_size, hidden_size, 1, dropout)
-        self.fc = nn.Linear(vocab_size, vocab_size)
+        # NOTE concat encoder output (B, T, 2H) and decoder output (B, U, H)
+        input_size = 3*hidden_size if bidirectional else 2*hidden_size
+        self.fc1 = nn.Linear(input_size, hidden_size)
+        self.fc2 = nn.Linear(hidden_size, vocab_size)
 
     def joint(self, f, g):
-        return F.relu(self.fc(f + g))
-        # return f + g
+        ''' `f`: encoder lstm output (B,T,U,2H)
+        `g`: decoder lstm output (B,T,U,H)
+        NOTE f and g must have the same size except the last dim'''
+        dim = len(f.shape) - 1
+        out = torch.cat((f, g), dim=dim)
+        out = F.tanh(self.fc1(out))
+        return self.fc2(out)
 
     def forward(self, xs, ymat, ys, xlen, ylen):
-        xs, _ = self.encoder(xs)
-        # forward pm
-        # start = autograd.Variable(torch.zeros(ys.shape[0], 1))
-        # if self.is_cuda:
-        #     start = start.cuda()
-        # ys = torch.cat((start, ys), dim=1)
+        xs, _ = self.encoder.lstm(xs)
         ymat = self.embed(ymat)
         ymat, _ = self.decoder(ymat)
         xs = xs.unsqueeze(dim=2)
         ymat = ymat.unsqueeze(dim=1)
+        # expand 
+        sz = torch.Size([max(i, j) for i, j in zip(xs.size(), ymat.size())])
+        xs = xs.expand(sz); ymat = ymat.expand(ymat)
+        # forward joint 
         out = F.log_softmax(self.joint(xs, ymat), dim=3)
         loss = self.loss(out, ys, xlen, ylen)
         return loss

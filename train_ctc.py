@@ -25,6 +25,8 @@ parser.add_argument('--batch_size', type=int, default=1, metavar='N',
                     help='batch size')
 parser.add_argument('--dropout', type=float, default=0.3,
                     help='dropout applied to layers (0 = no dropout)')
+parser.add_argument('--bi', default=False, action='store_true', 
+                    help='whether use bidirectional lstm')
 parser.add_argument('--log-interval', type=int, default=50, metavar='N',
                     help='report interval')
 parser.add_argument('--out', type=str, default='exp/ctc_lr1e-3',
@@ -45,7 +47,7 @@ random.seed(1024)
 torch.manual_seed(1024)
 torch.cuda.manual_seed_all(1024)
 
-model = RNNModel(123, 49, 250, 3, args.dropout)
+model = RNNModel(123, 49, 250, 3, args.dropout, bidirectional=args.bi)
 if args.init: model.load_state_dict(torch.load(args.init))
 if args.initam: model.encoder.load_state_dict(torch.load(args.initam))
 if args.cuda: model.cuda()
