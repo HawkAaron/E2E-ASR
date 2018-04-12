@@ -4,91 +4,35 @@ import torch
 from torch import nn, autograd
 import torch.nn.functional as F
 from transducer.functions import transducer
+from ctc_decoder import decode as ctc_beam
 
 class RNNModel(nn.Module):
     def __init__(self, input_size, vocab_size, hidden_size, num_layers, dropout=.2, blank=0, bidirectional=False):
         super(RNNModel, self).__init__()
         self.hidden_size = hidden_size
         self.num_layers = num_layers
+        self.vocab_size = vocab_size
         self.blank = blank
         # lstm hidden vector: (h_0, c_0) num_layers * num_directions, batch, hidden_size
         self.lstm = nn.LSTM(input_size, hidden_size, num_layers, batch_first=True, dropout=dropout, bidirectional=bidirectional)
         if bidirectional: hidden_size *= 2
         self.linear = nn.Linear(hidden_size, vocab_size)
-        self.init_weights()
 
-    def init_weights(self):
-        # TODO initialize lstm layers
-        self.linear.bias.data.fill_(0)
-        self.linear.weight.data.uniform_(-.1, .1)
-    
     def forward(self, xs, hid=None):
         h, hid = self.lstm(xs, hid)
         return self.linear(h), hid
 
     def greedy_decode(self, xs):
         xs = self(xs)[0][0] # only one sequence
-        xs = torch.log_softmax(xs, dim=1)
+        xs = F.log_softmax(xs, dim=1)
         logp, pred = torch.max(xs, dim=1)
-        return pred.cpu().asnumpy(), -float(logp.sum())
+        return pred.data.cpu().numpy(), -float(logp.sum())
 
-    def beam_search(self, xs, W=10, prefix=True):
+    def beam_search(self, xs, W):
         ''' CTC '''
         xs = self(xs)[0][0] # only one sequence
-        xs = torch.log_softmax(xs, dim=1)
-
-        def isprefix(a, b):
-            # a is the prefix of b
-            if a == b or len(a) >= len(b): return False
-            for i in range(len(a)):
-                if a[i] != b[i]: return False
-            return True
-
-        B = [Sequence(blank=self.blank)]
-        for i, x in enumerate(xs):
-            sorted(B, key=lambda a: len(a.k), reverse=True) # larger sequence first add
-            A = B
-            B = []
-            if prefix:
-                # for y in A:
-                #     y.logp = log_aplusb(y.logp, prefixsum(y, A, x))
-                for j in range(len(A)-1):
-                    for i in range(j+1, len(A)):
-                        if not isprefix(A[i].k, A[j].k): continue
-                        # A[i] -> A[j]
-                        idx = len(A[i].k)
-                        curlogp = A[i].logp
-                        for k in range(idx-1, len(A[j].k)-1):
-                            logp = A[j].g[k]
-                            curlogp += float(logp[A[j].k[k+1]])
-                        A[j].logp = log_aplusb(A[j].logp, curlogp)
-
-            while True:
-                y_hat = max(A, key=lambda a: a.logp)
-                # y* = most probable in A
-                A.remove(y_hat)
-                # calculate P(k|t), here x is logp
-                # for k \in vocab
-                for k in range(self.vocab_size):
-                    yk = Sequence(y_hat)
-                    yk.logp += float(x[k])
-                    # store prediction distribution and last hidden state
-                    # yk.h.append(hidden); yk.k.append(k)
-                    yk.k.append(k)
-                    if prefix: yk.g.append(x)
-                    A.append(yk)
-
-                y_hat = max(A, key=lambda a: a.logp)
-                yb = max(B, key=lambda a: a.logp)
-                if len(B) >= W and yb.logp >= y_hat.logp: break
-
-            # beam width
-            sorted(B, key=lambda a: a.logp, reverse=True)
-            B = B[:W]
-
-        # return highest probability sequence
-        print(B[0])
-        return B[0].k, -B[0].logp
+        logp = F.log_softmax(xs, dim=1)
+        return ctc_beam(logp.data.cpu().numpy(), W)        
 
 
 class Transducer(nn.Module):
@@ -100,7 +44,7 @@ class Transducer(nn.Module):
         self.num_layers = num_layers
         self.loss = transducer.TransducerLoss(blank_label=0)
         # NOTE encoder & decoder only use lstm
-        self.encoder = RNNModel(input_size, vocab_size, hidden_size, num_layers, dropout, bidirectional)
+        self.encoder = RNNModel(input_size, vocab_size, hidden_size, num_layers, dropout, bidirectional=bidirectional)
         self.embed = nn.Embedding(vocab_size, vocab_size-1, padding_idx=blank)
         self.embed.weight.data[1:] = torch.eye(vocab_size-1)
         self.embed.weight.requires_grad = False
@@ -109,6 +53,7 @@ class Transducer(nn.Module):
         input_size = 3*hidden_size if bidirectional else 2*hidden_size
         self.fc1 = nn.Linear(input_size, hidden_size)
         self.fc2 = nn.Linear(hidden_size, vocab_size)
+        self.relu = nn.PReLU()
 
     def joint(self, f, g):
         ''' `f`: encoder lstm output (B,T,U,2H)
@@ -116,18 +61,18 @@ class Transducer(nn.Module):
         NOTE f and g must have the same size except the last dim'''
         dim = len(f.shape) - 1
         out = torch.cat((f, g), dim=dim)
-        out = F.tanh(self.fc1(out))
+        out = self.relu(self.fc1(out))
         return self.fc2(out)
 
     def forward(self, xs, ymat, ys, xlen, ylen):
         xs, _ = self.encoder.lstm(xs)
         ymat = self.embed(ymat)
-        ymat, _ = self.decoder(ymat)
+        ymat, _ = self.decoder.lstm(ymat)
         xs = xs.unsqueeze(dim=2)
         ymat = ymat.unsqueeze(dim=1)
         # expand 
-        sz = torch.Size([max(i, j) for i, j in zip(xs.size(), ymat.size())])
-        xs = xs.expand(sz); ymat = ymat.expand(ymat)
+        sz = [max(i, j) for i, j in zip(xs.size()[:-1], ymat.size()[:-1])]
+        xs = xs.expand(torch.Size(sz+[xs.shape[-1]])); ymat = ymat.expand(torch.Size(sz+[ymat.shape[-1]]))
         # forward joint 
         out = F.log_softmax(self.joint(xs, ymat), dim=3)
         loss = self.loss(out, ys, xlen, ylen)
