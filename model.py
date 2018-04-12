@@ -99,8 +99,10 @@ class Transducer(nn.Module):
         self.num_layers = num_layers
         self.loss = transducer.TransducerLoss(blank_label=0)
         self.encoder = RNNModel(input_size, vocab_size, hidden_size, num_layers, dropout)
-        self.embed = nn.Embedding(vocab_size, hidden_size, padding_idx=blank)
-        self.decoder = RNNModel(hidden_size, vocab_size, hidden_size, 1, dropout)
+        self.embed = nn.Embedding(vocab_size, vocab_size-1, padding_idx=blank)
+        self.embed.weight.data[1:] = torch.eye(vocab_size-1)
+        self.embed.weight.requires_grad = False
+        self.decoder = RNNModel(vocab_size-1, vocab_size, hidden_size, 1, dropout)
         self.fc = nn.Linear(vocab_size, vocab_size)
 
     def joint(self, f, g):
