@@ -24,10 +24,12 @@ parser.add_argument('--epochs', type=int, default=200,
                     help='upper epoch limit')
 parser.add_argument('--batch_size', type=int, default=1, metavar='N',
                     help='batch size')
-parser.add_argument('--dropout', type=float, default=0.3,
+parser.add_argument('--dropout', type=float, default=0,
                     help='dropout applied to layers (0 = no dropout)')
 parser.add_argument('--bi', default=False, action='store_true', 
                     help='whether use bidirectional lstm')
+parser.add_argument('--noise', default=False, action='store_true',
+                    help='add Gaussian weigth noise')
 parser.add_argument('--log-interval', type=int, default=50, metavar='N',
                     help='report interval')
 parser.add_argument('--out', type=str, default='exp/rnnt_lr1e-3',
@@ -42,6 +44,8 @@ parser.add_argument('--schedule', default=False, action='store_true')
 args = parser.parse_args()
 
 os.makedirs(args.out, exist_ok=True)
+with open(os.path.join(args.out, 'args'), 'w') as f:
+    f.write(str(args))
 logging.basicConfig(format='%(asctime)s: %(message)s', datefmt='%H:%M:%S', filename=os.path.join(args.out, 'train.log'), level=logging.INFO)
 tb.configure(args.out)
 random.seed(1024)
@@ -50,11 +54,13 @@ torch.cuda.manual_seed_all(1024)
 
 # TODO use config file
 model = Transducer(123, 49, 250, 3, args.dropout, bidirectional=args.bi)
+for param in model.parameters():
+    torch.nn.init.uniform(param, -0.1, 0.1)
 if args.init: model.load_state_dict(torch.load(args.init))
 if args.initam: model.encoder.load_state_dict(torch.load(args.initam))
 if args.cuda: model.cuda()
 
-optimizer = torch.optim.SGD(model.parameters(), lr=args.lr, momentum=.9)
+optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()), lr=args.lr, momentum=.9)
 
 # data set
 trainset = SequentialLoader('train', args.batch_size)
