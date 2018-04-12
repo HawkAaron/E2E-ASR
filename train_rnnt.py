@@ -88,6 +88,11 @@ def train():
         # lr = args.lr * (0.1 ** (epoch // 30))
         for param_group in optimizer.param_groups:
             param_group['lr'] = lr
+    def add_noise(x):
+        dim = x.shape[-1]
+        noise = torch.normal(torch.zeros(dim), 0.075)
+        if x.is_cuda: noise = noise.cuda()
+        x.data += noise
 
     global tri
     prev_loss = 1000
@@ -98,6 +103,7 @@ def train():
         start_time = time.time()
         for i, (xs, ymat, ys, xlen, ylen) in enumerate(trainset):
             xs = Variable(torch.FloatTensor(xs)).cuda()
+            if args.noise: add_noise(xs)
             ymat = Variable(torch.LongTensor(ymat)).cuda()
             ys = Variable(torch.IntTensor(ys)); xlen = Variable(torch.IntTensor(xlen)); ylen = Variable(torch.IntTensor(ylen))
             model.train()
