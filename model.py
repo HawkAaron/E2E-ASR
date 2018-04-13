@@ -79,9 +79,9 @@ class Transducer(nn.Module):
         return loss
 
     def greedy_decode(self, x):
-        x = self.encoder(x)[0][0]
+        x = self.encoder.lstm(x)[0][0]
         vy = autograd.Variable(torch.LongTensor([0]), volatile=True).view(1,1) # vector preserve for embedding
-        y, h = self.decoder(self.embed(vy)) # decode first zero 
+        y, h = self.decoder.lstm(self.embed(vy)) # decode first zero 
         y_seq = []; logp = 0
         for i in x:
             ytu = self.joint(i, y[0][0])
@@ -91,7 +91,7 @@ class Transducer(nn.Module):
             if pred != self.blank:
                 y_seq.append(pred)
                 vy.data[0][0] = pred # change pm state
-                y, h = self.decoder(self.embed(vy), h)
+                y, h = self.decoder.lstm(self.embed(vy), h)
         return y_seq, -logp
 
 
@@ -104,7 +104,7 @@ class Transducer(nn.Module):
             ''' `label`: int '''
             label = autograd.Variable(torch.LongTensor([label]), volatile=True).view(1,1)
             label = self.embed(label)
-            pred, hidden = self.decoder(label, hidden)
+            pred, hidden = self.decoder.lstm(label, hidden)
             return pred[0][0], hidden
 
         def isprefix(a, b):
@@ -114,7 +114,7 @@ class Transducer(nn.Module):
                 if a[i] != b[i]: return False
             return True
 
-        xs = self.encoder(xs)[0][0]
+        xs = self.encoder.lstm(xs)[0][0]
         B = [Sequence(blank=self.blank)]
         for i, x in enumerate(xs):
             sorted(B, key=lambda a: len(a.k), reverse=True) # larger sequence first add
@@ -129,11 +129,11 @@ class Transducer(nn.Module):
                         # A[i] -> A[j]
                         pred, _ = forward_step(A[i].k[-1], A[i].h)
                         idx = len(A[i].k)
-                        ytu = self.joint(pred, x)
+                        ytu = self.joint(x, pred)
                         logp = F.log_softmax(ytu, dim=0)
                         curlogp = A[i].logp + float(logp[A[j].k[idx]])
                         for k in range(idx, len(A[j].k)-1):
-                            ytu = self.joint(A[j].g[k], x)
+                            ytu = self.joint(x, A[j].g[k])
                             logp = F.log_softmax(ytu, dim=0)
                             curlogp += float(logp[A[j].k[k+1]])
                         A[j].logp = log_aplusb(A[j].logp, curlogp)
@@ -145,7 +145,7 @@ class Transducer(nn.Module):
                 # calculate P(k|y_hat, t)
                 # get last label and hidden state
                 pred, hidden = forward_step(y_hat.k[-1], y_hat.h)
-                ytu = self.joint(pred, x)
+                ytu = self.joint(x, pred)
                 logp = F.log_softmax(ytu, dim=0) # log probability for each k
                 # for k \in vocab
                 for k in range(self.vocab_size):
