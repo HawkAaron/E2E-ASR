@@ -13,7 +13,7 @@ import kaldi_io
 from model import Transducer
 from transducer.functions import transducer
 import tensorboard_logger as tb
-from DataLoader import SequentialLoader, NpyLoader
+from DataLoader import SequentialLoader
 
 parser = argparse.ArgumentParser(description='PyTorch LSTM CTC Acoustic Model on TIMIT.')
 parser.add_argument('--lr', type=float, default=1e-3,
@@ -70,12 +70,12 @@ tri = cvi = 0
 def eval():
     global cvi
     losses = []
-    for xs, ymat, ys, xlen, ylen in devset:
+    for xs, ys, xlen, ylen in devset:
         xs = Variable(torch.FloatTensor(xs), volatile=True).cuda()
-        ymat = Variable(torch.LongTensor(ymat), volatile=True).cuda()
-        ys = Variable(torch.IntTensor(ys)); xlen = Variable(torch.IntTensor(xlen)); ylen = Variable(torch.IntTensor(ylen))
+        ys = Variable(torch.LongTensor(ys), volatile=True).cuda()
+        xlen = Variable(torch.IntTensor(xlen)); ylen = Variable(torch.IntTensor(ylen))
         model.eval()
-        loss = model(xs, ymat, ys, xlen, ylen)
+        loss = model(xs, ys, xlen, ylen)
         loss = float(loss.data) * len(xlen)
         losses.append(loss)
         tb.log_value('cv_loss', loss/len(xlen), cvi)
@@ -101,14 +101,14 @@ def train():
     for epoch in range(1, args.epochs):
         totloss = 0; losses = []
         start_time = time.time()
-        for i, (xs, ymat, ys, xlen, ylen) in enumerate(trainset):
+        for i, (xs, ys, xlen, ylen) in enumerate(trainset):
             xs = Variable(torch.FloatTensor(xs)).cuda()
             if args.noise: add_noise(xs)
-            ymat = Variable(torch.LongTensor(ymat)).cuda()
-            ys = Variable(torch.IntTensor(ys)); xlen = Variable(torch.IntTensor(xlen)); ylen = Variable(torch.IntTensor(ylen))
+            ys = Variable(torch.LongTensor(ys)).cuda()
+            xlen = Variable(torch.IntTensor(xlen)); ylen = Variable(torch.IntTensor(ylen))
             model.train()
             optimizer.zero_grad()
-            loss = model(xs, ymat, ys, xlen, ylen)
+            loss = model(xs, ys, xlen, ylen)
             loss.backward()
             loss = float(loss.data) * len(xlen)
             totloss += loss; losses.append(loss)

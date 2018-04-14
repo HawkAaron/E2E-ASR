@@ -61,8 +61,13 @@ class Transducer(nn.Module):
         out = F.tanh(self.fc1(out))
         return self.fc2(out)
 
-    def forward(self, xs, ymat, ys, xlen, ylen):
+    def forward(self, xs, ys, xlen, ylen):
         xs, _ = self.encoder(xs)
+        # concat first zero
+        zero = autograd.Variable(torch.zeros((ys.shape[0], 1)).long())
+        if ys.is_cuda: zero = zero.cuda()
+        ymat = torch.cat((zero, ys), dim=1)
+        # forwoard pm
         ymat = self.embed(ymat)
         ymat, _ = self.decoder(ymat)
         xs = xs.unsqueeze(dim=2)
@@ -72,6 +77,8 @@ class Transducer(nn.Module):
         xs = xs.expand(torch.Size(sz+[xs.shape[-1]])); ymat = ymat.expand(torch.Size(sz+[ymat.shape[-1]]))
         # forward joint 
         out = F.log_softmax(self.joint(xs, ymat), dim=3)
+        # NOTE loss function need flatten label
+        ys = torch.cat([ys[i, :j] for i, j in enumerate(ylen.data)], dim=0).int().cpu()
         loss = self.loss(out, ys, xlen, ylen)
         return loss
 

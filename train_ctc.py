@@ -67,9 +67,11 @@ def eval():
     global cvi
     losses = []
     tacc = TokenAcc()
-    for xs, _, ys, xlen, ylen in devset:
+    for xs, ys, xlen, ylen in devset:
         x = Variable(torch.FloatTensor(xs), volatile=True).cuda()
-        y = Variable(torch.IntTensor(ys)); xl = Variable(torch.IntTensor(xlen)); yl = Variable(torch.IntTensor(ylen))
+        ys = np.hstack([ys[i, :j] for i, j in enumerate(ylen)])
+        y = Variable(torch.IntTensor(ys))
+        xl = Variable(torch.IntTensor(xlen)); yl = Variable(torch.IntTensor(ylen))
         model.eval()
         out = model(x)[0]
         loss = criterion(out.transpose(0,1).contiguous(), y, xl, yl)
@@ -100,10 +102,12 @@ def train():
         totloss = 0; losses = []
         start_time = time.time()
         tacc = TokenAcc()
-        for i, (xs, _, ys, xlen, ylen) in enumerate(trainset):
+        for i, (xs, ys, xlen, ylen) in enumerate(trainset):
             x = Variable(torch.FloatTensor(xs)).cuda()
             if args.noise: add_noise(x)
-            y = Variable(torch.IntTensor(ys)); xl = Variable(torch.IntTensor(xlen)); yl = Variable(torch.IntTensor(ylen))
+            ys = np.hstack([ys[i, :j] for i, j in enumerate(ylen)])
+            y = Variable(torch.IntTensor(ys)) 
+            xl = Variable(torch.IntTensor(xlen)); yl = Variable(torch.IntTensor(ylen))
             model.train()
             optimizer.zero_grad()
             out = model(x)[0]

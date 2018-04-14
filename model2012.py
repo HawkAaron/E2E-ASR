@@ -49,14 +49,21 @@ class Transducer(nn.Module):
         self.embed.weight.requires_grad = False
         self.decoder = RNNModel(vocab_size-1, vocab_size, hidden_size, 1, dropout)
 
-    def forward(self, xs, ymat, ys, xlen, ylen):
+    def forward(self, xs, ys, xlen, ylen):
         xs, _ = self.encoder(xs)
+        # concat first zero
+        zero = autograd.Variable(torch.zeros((ys.shape[0], 1)).long())
+        if ys.is_cuda: zero = zero.cuda()
+        ymat = torch.cat((zero, ys), dim=1)
+        # forwoard pm
         ymat = self.embed(ymat)
         ymat, _ = self.decoder(ymat)
         xs = xs.unsqueeze(dim=2)
         ymat = ymat.unsqueeze(dim=1)
         # forward joint 
         out = F.log_softmax(xs + ymat, dim=3)
+        # NOTE loss function need flatten label
+        ys = torch.cat([ys[i, :j] for i, j in enumerate(ylen.data)], dim=0).int().cpu()
         loss = self.loss(out, ys, xlen, ylen)
         return loss
 
