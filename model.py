@@ -34,7 +34,6 @@ class RNNModel(nn.Module):
         logp = F.log_softmax(xs, dim=1)
         return ctc_beam(logp.data.cpu().numpy(), W)        
 
-
 class Transducer(nn.Module):
     def __init__(self, input_size, vocab_size, hidden_size, num_layers, dropout=.5, blank=0, bidirectional=False):
         super(Transducer, self).__init__()
@@ -44,16 +43,14 @@ class Transducer(nn.Module):
         self.num_layers = num_layers
         self.loss = transducer.TransducerLoss(blank_label=0)
         # NOTE encoder & decoder only use lstm
-        self.encoder = RNNModel(input_size, vocab_size, hidden_size, num_layers, dropout, bidirectional=bidirectional)
+        self.encoder = RNNModel(input_size, hidden_size, hidden_size, num_layers, dropout, bidirectional=bidirectional)
         self.embed = nn.Embedding(vocab_size, vocab_size-1, padding_idx=blank)
         self.embed.weight.data[1:] = torch.eye(vocab_size-1)
         self.embed.weight.requires_grad = False
-        self.decoder = RNNModel(vocab_size-1, vocab_size, hidden_size, 1, dropout)
-        # NOTE concat encoder output (B, T, 2H) and decoder output (B, U, H)
-        input_size = 3*hidden_size if bidirectional else 2*hidden_size
-        self.fc1 = nn.Linear(input_size, hidden_size)
+        # self.decoder = RNNModel(vocab_size-1, vocab_size, hidden_size, 1, dropout)
+        self.decoder = nn.LSTM(vocab_size-1, hidden_size, 1, batch_first=True, dropout=dropout)
+        self.fc1 = nn.Linear(2*hidden_size, hidden_size)
         self.fc2 = nn.Linear(hidden_size, vocab_size)
-        self.relu = nn.PReLU()
 
     def joint(self, f, g):
         ''' `f`: encoder lstm output (B,T,U,2H)
@@ -61,13 +58,13 @@ class Transducer(nn.Module):
         NOTE f and g must have the same size except the last dim'''
         dim = len(f.shape) - 1
         out = torch.cat((f, g), dim=dim)
-        out = self.relu(self.fc1(out))
+        out = F.tanh(self.fc1(out))
         return self.fc2(out)
 
     def forward(self, xs, ymat, ys, xlen, ylen):
-        xs, _ = self.encoder.lstm(xs)
+        xs, _ = self.encoder(xs)
         ymat = self.embed(ymat)
-        ymat, _ = self.decoder.lstm(ymat)
+        ymat, _ = self.decoder(ymat)
         xs = xs.unsqueeze(dim=2)
         ymat = ymat.unsqueeze(dim=1)
         # expand 
@@ -79,9 +76,9 @@ class Transducer(nn.Module):
         return loss
 
     def greedy_decode(self, x):
-        x = self.encoder.lstm(x)[0][0]
+        x = self.encoder(x)[0][0]
         vy = autograd.Variable(torch.LongTensor([0]), volatile=True).view(1,1) # vector preserve for embedding
-        y, h = self.decoder.lstm(self.embed(vy)) # decode first zero 
+        y, h = self.decoder(self.embed(vy)) # decode first zero 
         y_seq = []; logp = 0
         for i in x:
             ytu = self.joint(i, y[0][0])
@@ -91,7 +88,7 @@ class Transducer(nn.Module):
             if pred != self.blank:
                 y_seq.append(pred)
                 vy.data[0][0] = pred # change pm state
-                y, h = self.decoder.lstm(self.embed(vy), h)
+                y, h = self.decoder(self.embed(vy), h)
         return y_seq, -logp
 
 
@@ -104,7 +101,7 @@ class Transducer(nn.Module):
             ''' `label`: int '''
             label = autograd.Variable(torch.LongTensor([label]), volatile=True).view(1,1)
             label = self.embed(label)
-            pred, hidden = self.decoder.lstm(label, hidden)
+            pred, hidden = self.decoder(label, hidden)
             return pred[0][0], hidden
 
         def isprefix(a, b):
@@ -114,7 +111,7 @@ class Transducer(nn.Module):
                 if a[i] != b[i]: return False
             return True
 
-        xs = self.encoder.lstm(xs)[0][0]
+        xs = self.encoder(xs)[0][0]
         B = [Sequence(blank=self.blank)]
         for i, x in enumerate(xs):
             sorted(B, key=lambda a: len(a.k), reverse=True) # larger sequence first add
