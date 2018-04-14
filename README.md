@@ -1,5 +1,6 @@
 ## File description
-* model.py: rnnt joint model
+* model.py: graves2013 rnnt joint model
+* model2012.py: graves2012 rnnt model
 * train_rnnt.py: rnnt training script
 * train_ctc.py: ctc acoustic model training script
 * eval.py: rnnt & ctc decode
