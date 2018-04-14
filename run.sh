@@ -61,6 +61,8 @@ for x in train dev test; do
   steps/compute_cmvn_stats.sh data/$x exp/make_fbank/$x $fbankdir
 done
 
+echo "<eps> 0" > data/lang/phones.txt
+cut -f1 conf/phones.60-48-39.map | awk '{printf("%s %d\n", $0, NR)}' >> data/lang/phones.txt
 exit
 
 echo ============================================================================
