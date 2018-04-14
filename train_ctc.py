@@ -49,7 +49,7 @@ random.seed(1024)
 torch.manual_seed(1024)
 torch.cuda.manual_seed_all(1024)
 
-model = RNNModel(123, 49, 250, 3, args.dropout, bidirectional=args.bi)
+model = RNNModel(123, 62, 250, 3, args.dropout, bidirectional=args.bi)
 if args.init: model.load_state_dict(torch.load(args.init))
 else: 
     for param in model.parameters(): torch.nn.init.uniform(param, -0.1, 0.1)
