@@ -54,7 +54,7 @@ class SequentialLoader:
     def __init__(self, dtype, batch_size=1):
         self.labels = {}
         self.feats_rspecifier = 'ark:copy-feats scp:data/{}/feats.scp ark:- | apply-cmvn --utt2spk=ark:data/{}/utt2spk scp:data/{}/cmvn.scp ark:- ark:- |\
- add-deltas --delta-order=2 ark:- ark:- | nnet-forward data/final.feature_transform ark:- ark:- |'.format(dtype, dtype, dtype)
+ add-deltas --delta-order=1 ark:- ark:- | nnet-forward data/final.feature_transform ark:- ark:- |'.format(dtype, dtype, dtype)
         self.batch_size = batch_size
         # load label
         with open('data/'+dtype+'/text', 'r') as f:

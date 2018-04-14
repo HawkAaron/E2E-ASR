@@ -33,16 +33,16 @@ model.load_state_dict(torch.load(args.model, map_location='cpu'))
 
 # data set
 feat = 'ark:copy-feats scp:data/{}/feats.scp ark:- | apply-cmvn --utt2spk=ark:data/{}/utt2spk scp:data/{}/cmvn.scp ark:- ark:- |\
- add-deltas --delta-order=2 ark:- ark:- | nnet-forward data/final.feature_transform ark:- ark:- |'.format(args.dataset, args.dataset, args.dataset)
+ add-deltas --delta-order=1 ark:- ark:- | nnet-forward data/final.feature_transform ark:- ark:- |'.format(args.dataset, args.dataset, args.dataset)
 with open('data/'+args.dataset+'/text', 'r') as f:
     label = {}
     for line in f:
         line = line.split()
         label[line[0]] = line[1:]
 
-# Phone map
+# Phone map NOTE no meed to map in Graves2012
 with open('conf/phones.60-48-39.map', 'r') as f:
-    pmap = {'<eps>':'<eps>'}
+    pmap = {rephone[0]: rephone[0], '<sos>': '<sos>'}
     for line in f:
         line = line.split()
         if len(line) < 3: continue
@@ -70,8 +70,10 @@ def decode():
             y, nll = model.beam_search(xs, args.beam)
         else:
             y, nll = model.greedy_decode(xs)
-        y = [pmap[rephone[i]] for i in y]
-        t = [pmap[i] for i in label[k]]
+        # y = [pmap[rephone[i]] for i in y]
+        # t = [pmap[i] for i in label[k]]
+        y = [rephone[i] for i in y]
+        t = label[k]
         y, t, e = distance(y, t)
         err += e; cnt += len(t)
         logging.info('[{}]: {}'.format(k, ' '.join(t)))

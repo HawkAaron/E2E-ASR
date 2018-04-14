@@ -10,7 +10,7 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 from warpctc_pytorch import CTCLoss
 import kaldi_io
-from model import Transducer
+from model2012 import Transducer
 from transducer.functions import transducer
 import tensorboard_logger as tb
 from DataLoader import SequentialLoader, NpyLoader
@@ -18,8 +18,6 @@ from DataLoader import SequentialLoader, NpyLoader
 parser = argparse.ArgumentParser(description='PyTorch LSTM CTC Acoustic Model on TIMIT.')
 parser.add_argument('--lr', type=float, default=1e-3,
                     help='initial learning rate')
-parser.add_argument('--clip', type=float, default=0.2,
-                    help='gradient clipping')
 parser.add_argument('--epochs', type=int, default=200,
                     help='upper epoch limit')
 parser.add_argument('--batch_size', type=int, default=1, metavar='N',
@@ -53,7 +51,7 @@ torch.manual_seed(1024)
 torch.cuda.manual_seed_all(1024)
 
 # TODO use config file
-model = Transducer(123, 49, 250, 3, args.dropout, bidirectional=args.bi)
+model = Transducer(26, 40, 128, 2, args.dropout, bidirectional=args.bi)
 for param in model.parameters():
     torch.nn.init.uniform(param, -0.1, 0.1)
 if args.init: model.load_state_dict(torch.load(args.init))
