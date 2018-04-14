@@ -10,7 +10,7 @@ class Attention(nn.Module):
         # NOTE calculated seperately for each batch
         # TODO change bmm to point-wise product
         # BTH * BH
-        output = enc_out * hidden[0] # BTH
+        output = enc_out * hidden[-1].unsqueeze(dim=1) # BTH
         output = output.sum(dim=2) # BT
         # output = torch.bmm(enc_out, hidden[0].unsqueeze(dim=2)).squeeze(dim=2) # NOTE which hidden ?
         output = F.softmax(output, dim=1) # attention alignment
