@@ -16,7 +16,7 @@ from DataLoader import SequentialLoader, TokenAcc
 parser = argparse.ArgumentParser(description='PyTorch Seq2seq-Attention Acoustic Model on TIMIT.')
 parser.add_argument('--lr', type=float, default=1e-3,
                     help='initial learning rate')
-parser.add_argument('--epochs', type=int, default=200,
+parser.add_argument('--epochs', type=int, default=100,
                     help='upper epoch limit')
 parser.add_argument('--batch_size', type=int, default=1, metavar='N',
                     help='batch size')
