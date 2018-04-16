@@ -24,6 +24,8 @@ parser.add_argument('--dropout', type=float, default=0,
                     help='dropout applied to layers (0 = no dropout)')
 parser.add_argument('--bi', default=False, action='store_true', 
                     help='whether use bidirectional lstm')
+parser.add_argument('--sr', type=float, default=0.4,
+                    help='decoder sampleing rate, only for training')
 parser.add_argument('--noise', default=False, action='store_true',
                     help='add Gaussian weigth noise')
 parser.add_argument('--log-interval', type=int, default=50, metavar='N',
@@ -48,7 +50,7 @@ random.seed(1024)
 torch.manual_seed(1024)
 torch.cuda.manual_seed_all(1024)
 
-model = Seq2seq(123, 63, 250, 3, args.dropout, bidirectional=args.bi)
+model = Seq2seq(123, 63, 250, 3, args.dropout, args.bi, args.sr)
 if args.init: model.load_state_dict(torch.load(args.init))
 else: 
     for param in model.parameters(): torch.nn.init.uniform(param, -0.1, 0.1)
@@ -68,7 +70,7 @@ def eval():
         x = Variable(torch.FloatTensor(xs), volatile=True).cuda()
         y = Variable(torch.LongTensor(ys), volatile=True).cuda()
         model.eval()
-        loss = model(x, y)[1]
+        loss = model(x, y)
         loss = float(loss.data) # batch size
         losses.append(loss)
         tb.log_value('cv_loss', loss, cvi)
@@ -100,7 +102,7 @@ def train():
             y = Variable(torch.LongTensor(ys)).cuda()
             model.train()
             optimizer.zero_grad()
-            loss = model(x, y)[1]
+            loss = model(x, y)
             loss.backward()
             loss = float(loss.data) # batch size
             totloss += loss; losses.append(loss)

@@ -11,5 +11,10 @@ class Encoder(nn.Module):
         `inputs`: (batch, length, input_size)
         `hidden`: Initial hidden state (num_layer, batch_size, hidden_size)
         '''
-        output, hidden = self.rnn(inputs, hidden)
-        return output, hidden
+        x, h = self.rnn(inputs, hidden)
+        dim = h.shape[0]
+        h = h.sum(dim=0) / dim
+        if self.rnn.bidirectional:
+            half = x.shape[-1] // 2
+            x = x[:, :, :half] + x[:, :, half:]
+        return x, h
