@@ -1,6 +1,7 @@
 import random
 import torch
 from torch import nn
+from torch.autograd import Variable
 import torch.nn.functional as F
 from .attention import Attention, NNAttention
 
@@ -21,23 +22,44 @@ class Decoder(nn.Module):
         `enc_hid`: last hidden state of encoder
         '''
         target = target.transpose(0, 1)
+        length = target.shape[0]
         inputs = target[0] # B
         hidden = enc_hid # BH
         ax = sx = None 
         out = []; align = []
+        loss = 0
         # target remove beginning 'sos', in my config, 'sos' is the last label
-        for i in range(1, target.shape[0]):
+        for i in range(1, length):
             output, hidden, ax, sx = self._step(inputs, hidden, enc_out, ax, sx)
             out.append(output); align.append(ax)
             if random.random() < self.sample_rate:
                 inputs = output.max(dim=1)[1]
             else:
                 inputs = target[i]
+            # truncated BPTT
+            if i % 40 == 0:
+                out = torch.cat(out, dim=0)
+                out = out.view(-1, out.shape[-1])
+                t = target[i-39:i+1].contiguous().view(-1)
+                loss = loss + F.cross_entropy(out, t, size_average=False)
+                out = []
+                loss.backward()
+                loss = Variable(loss.data)
+                hidden = Variable(hidden.data)
+                ax = Variable(ax.data); sx = Variable(sx.data)
         # loss
-        out = torch.cat(out, dim=0)
-        out = out.view(-1, out.shape[-1])
-        target = target[1:].contiguous().view(-1)
-        return F.cross_entropy(out, target, size_average=False)
+        left = len(out)
+        if left > 0:
+            out = torch.cat(out, dim=0)
+            out = out.view(-1, out.shape[-1])
+            target = target[length-left:].contiguous().view(-1)
+            loss = loss + F.cross_entropy(out, target, size_average=False)
+            loss.backward()
+        # out = torch.cat(out, dim=0)
+        # out = out.view(-1, out.shape[-1])
+        # target = target[1:].contiguous().view(-1)
+        # return F.cross_entropy(out, target, size_average=False)
+        return loss
     
     def _step(self, inputs, hidden, enc_out, ax, sx):
         embeded = self.embedding(inputs)
