@@ -8,10 +8,8 @@ import torch
 from torch import nn, autograd
 from torch.autograd import Variable
 import torch.nn.functional as F
-from warpctc_pytorch import CTCLoss
 import kaldi_io
 from model import Transducer
-from transducer.functions import transducer
 import tensorboard_logger as tb
 from DataLoader import SequentialLoader
 

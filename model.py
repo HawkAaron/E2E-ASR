@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from torch import nn, autograd
 import torch.nn.functional as F
-from transducer.functions import transducer
+from warprnnt_pytorch import RNNTLoss
 from ctc_decoder import decode as ctc_beam
 
 class RNNModel(nn.Module):
@@ -41,7 +41,7 @@ class Transducer(nn.Module):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-        self.loss = transducer.TransducerLoss(blank_label=0)
+        self.loss = RNNTLoss(size_average=True, blank_label=0)
         # NOTE encoder & decoder only use lstm
         self.encoder = RNNModel(input_size, hidden_size, hidden_size, num_layers, dropout, bidirectional=bidirectional)
         self.embed = nn.Embedding(vocab_size, vocab_size-1, padding_idx=blank)
