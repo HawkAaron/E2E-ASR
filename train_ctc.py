@@ -103,7 +103,8 @@ def train():
         start_time = time.time()
         tacc = TokenAcc()
         for i, (xs, ys, xlen, ylen) in enumerate(trainset):
-            x = Variable(torch.FloatTensor(xs)).cuda()
+            x = Variable(torch.FloatTensor(xs))
+            if args.cuda: x = x.cuda()
             if args.noise: add_noise(x)
             ys = np.hstack([ys[i, :j] for i, j in enumerate(ylen)])
             y = Variable(torch.IntTensor(ys)) 
