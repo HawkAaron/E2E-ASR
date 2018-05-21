@@ -58,36 +58,35 @@ class Transducer(nn.Module):
         # forwoard pm
         ymat = self.embed(ymat)
         ymat, _ = self.decoder(ymat)
-        xs = xs.unsqueeze(dim=2)
-        ymat = ymat.unsqueeze(dim=1)
-        # forward joint 
-        out = F.log_softmax(xs + ymat, dim=3)
-        # NOTE loss function need flatten label
-        # ys = torch.cat([ys[i, :j] for i, j in enumerate(ylen.data)], dim=0).int().cpu()
-        ys = ys.int().cpu()
-        loss = self.loss(out, ys, xlen, ylen)
+        # NOTE GPU version of add network 
+        loss = self.loss(xs, ymat, ys, xlen, ylen)
         return loss
 
-    def greedy_decode(self, x):
-        x = self.encoder(x)[0][0]
-        vy = autograd.Variable(torch.LongTensor([0]), volatile=True).view(1,1) # vector preserve for embedding
-        y, h = self.decoder(self.embed(vy)) # decode first zero 
-        y_seq = []; logp = 0
-        for i in x:
-            out = F.log_softmax(i + y[0][0], dim=0)
-            p, pred = torch.max(out, dim=0) # suppose blank = -1
-            pred = int(pred); logp += float(p)
-            if pred != self.blank:
-                y_seq.append(pred)
-                vy.data[0][0] = pred # change pm state
-                y, h = self.decoder(self.embed(vy), h)
-        return y_seq, -logp
-
+    def greedy_decode(self, xs):
+        def decode_one(x):
+            vy = autograd.Variable(torch.LongTensor([0]), volatile=True).view(1,1)
+            if xs.is_cuda: vy = vy.cuda()
+            zeroy, zeroh = self.decoder(self.embed(vy))
+            # vy.data[0][0] = 0
+            y, h = zeroy, zeroh
+            y_seq = []
+            for i in x:
+                _, pred = torch.max(i + y[0][0], dim=0)
+                pred = int(pred)
+                if pred != self.blank:
+                    y_seq.append(pred)
+                    vy.data[0][0] = pred
+                    y, h = self.decoder(self.embed(vy), h)
+            return y_seq
+        # forward encoder
+        xs, _ = self.encoder(xs)
+        return [decode_one(x) for x in xs]
 
     def beam_search(self, xs, W=10, prefix=True):
         '''''
         `xs`: acoustic model outputs
         NOTE only support one sequence (batch size = 1)
+        TODO skip summation over prefixes unless multiple hypotheses are identical
         '''''
         def forward_step(label, hidden):
             ''' `label`: int '''

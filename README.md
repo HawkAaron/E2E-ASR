@@ -32,7 +32,4 @@ python eval.py <path to best model> --ctc --bi --beam 100
 * RNN Transducer (Graves 2012): [Sequence Transduction with Recurrent Neural Networks](https://arxiv.org/abs/1211.3711)
 * RNNT joint (Graves 2013): [Speech Recognition with Deep Recurrent Neural Networks](https://arxiv.org/abs/1303.5778 )
 * (PyTorch End-to-End Models for ASR)[https://github.com/awni/speech]
-* (A Fast Sequence Transducer Implementation with PyTorch Bindings)[https://github.com/awni/transducer]
-
-## TODO
-* CTC beam search
+* (A Fast Sequence Transducer GPU Implementation with PyTorch Bindings)[https://github.com/HawkAaron/warp-transducer/tree/add_network_accelerate]
