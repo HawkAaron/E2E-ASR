@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from torch import nn, autograd
 import torch.nn.functional as F
-from warprnnt_pytorch import RNNTLoss
+from pytorch_transducer import RNNTLoss
 from ctc_decoder import decode as ctc_beam
 
 class RNNModel(nn.Module):
@@ -75,11 +75,15 @@ class Transducer(nn.Module):
         # expand 
         sz = [max(i, j) for i, j in zip(xs.size()[:-1], ymat.size()[:-1])]
         xs = xs.expand(torch.Size(sz+[xs.shape[-1]])); ymat = ymat.expand(torch.Size(sz+[ymat.shape[-1]]))
-        # forward joint 
-        out = F.log_softmax(self.joint(xs, ymat), dim=3)
-        # NOTE loss function need flatten label
-        ys = torch.cat([ys[i, :j] for i, j in enumerate(ylen.data)], dim=0).int().cpu()
-        loss = self.loss(out, ys, xlen, ylen)
+        out = self.joint(xs, ymat)
+        if ys.is_cuda:
+            xlen = xlen.cuda()
+            ylen = ylen.cuda()
+        else:
+            out = F.log_softmax(out, dim=3)
+            # NOTE loss function need flatten label
+            ys = torch.cat([ys[i, :j] for i, j in enumerate(ylen.data)], dim=0).cpu()
+        loss = self.loss(out, ys.int(), xlen, ylen)
         return loss
 
     def greedy_decode(self, x):
