@@ -10,7 +10,6 @@ from torch.autograd import Variable
 import torch.nn.functional as F
 import kaldi_io
 from model import Transducer
-import tensorboard_logger as tb
 from DataLoader import SequentialLoader
 
 parser = argparse.ArgumentParser(description='PyTorch LSTM CTC Acoustic Model on TIMIT.')
@@ -45,7 +44,6 @@ with open(os.path.join(args.out, 'args'), 'w') as f:
     f.write(str(args))
 if args.stdout: logging.basicConfig(format='%(asctime)s: %(message)s', datefmt='%H:%M:%S', level=logging.INFO)
 else: logging.basicConfig(format='%(asctime)s: %(message)s', datefmt='%H:%M:%S', filename=os.path.join(args.out, 'train.log'), level=logging.INFO)
-tb.configure(args.out)
 random.seed(1024)
 torch.manual_seed(1024)
 torch.cuda.manual_seed_all(1024)
@@ -64,9 +62,7 @@ optimizer = torch.optim.SGD(filter(lambda p: p.requires_grad, model.parameters()
 trainset = SequentialLoader('train', args.batch_size)
 devset = SequentialLoader('dev', args.batch_size)
 
-tri = cvi = 0
 def eval():
-    global cvi
     losses = []
     for xs, ys, xlen, ylen in devset:
         xs = Variable(torch.FloatTensor(xs), volatile=True).cuda()
@@ -76,8 +72,6 @@ def eval():
         loss = model(xs, ys, xlen, ylen)
         loss = float(loss.data) * len(xlen)
         losses.append(loss)
-        tb.log_value('cv_loss', loss/len(xlen), cvi)
-        cvi += 1
     return sum(losses) / len(devset)
 
 def train():
@@ -92,7 +86,6 @@ def train():
         if x.is_cuda: noise = noise.cuda()
         x.data += noise
 
-    global tri
     prev_loss = 1000
     best_model = None
     lr = args.lr
@@ -113,9 +106,6 @@ def train():
             if args.gradclip: grad_norm = nn.utils.clip_grad_norm(model.parameters(), 200)
             optimizer.step()
 
-            tb.log_value('train_loss', loss/len(xlen), tri)
-            if args.gradclip: tb.log_value('train_grad_norm', grad_norm, tri)
-            tri += 1
 
             if i % args.log_interval == 0 and i > 0:
                 loss = totloss / args.batch_size / args.log_interval
