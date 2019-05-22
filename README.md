@@ -30,10 +30,10 @@ python eval.py <path to best model> --ctc --bi --beam 100
 
 ## Results
 
-    | Model | PER |
-    | --- | --- |
-    | CTC | 21.38 |
-    | RNN-T | 20.59 |
+| Model | PER |
+| --- | --- |
+| CTC | 21.38 |
+| RNN-T | 20.59 |
 
 ## Requirements
 * Python 3.6
