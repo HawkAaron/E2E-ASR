@@ -31,6 +31,10 @@ Model = RNNModel if args.ctc else Transducer
 model = Model(123, 62, 250, 3, bidirectional=args.bi)
 model.load_state_dict(torch.load(args.model, map_location='cpu'))
 
+use_gpu = torch.cuda.is_available()
+if use_gpu:
+    model.cuda()
+
 # data set
 feat = 'ark:copy-feats scp:data/{}/feats.scp ark:- | apply-cmvn --utt2spk=ark:data/{}/utt2spk scp:data/{}/cmvn.scp ark:- ark:- |\
  add-deltas --delta-order=2 ark:- ark:- | nnet-forward data/final.feature_transform ark:- ark:- |'.format(args.dataset, args.dataset, args.dataset)
@@ -61,11 +65,14 @@ def distance(y, t, blank=rephone[0]):
     t = remap(t, blank)
     return y, t, editdistance.eval(y, t)
 
+model.eval()
 def decode():
     logging.info('Decoding transduction model:')
     err = cnt = 0
     for k, v in kaldi_io.read_mat_ark(feat):
         xs = Variable(torch.FloatTensor(v[None, ...]), volatile=True)
+        if use_gpu:
+            xs = xs.cuda()
         if args.beam > 0:
             y, nll = model.beam_search(xs, args.beam)
         else:

@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from torch import nn, autograd
 import torch.nn.functional as F
-from pytorch_transducer import RNNTLoss
+from warprnnt_pytorch import RNNTLoss
 from ctc_decoder import decode as ctc_beam
 
 class RNNModel(nn.Module):
@@ -41,7 +41,7 @@ class Transducer(nn.Module):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
-        self.loss = RNNTLoss(size_average=True)
+        self.loss = RNNTLoss()
         # NOTE encoder & decoder only use lstm
         self.encoder = RNNModel(input_size, hidden_size, hidden_size, num_layers, dropout, bidirectional=bidirectional)
         self.embed = nn.Embedding(vocab_size, vocab_size-1, padding_idx=blank)
@@ -89,6 +89,7 @@ class Transducer(nn.Module):
     def greedy_decode(self, x):
         x = self.encoder(x)[0][0]
         vy = autograd.Variable(torch.LongTensor([0]), volatile=True).view(1,1) # vector preserve for embedding
+        if x.is_cuda: vy = vy.cuda()
         y, h = self.decoder(self.embed(vy)) # decode first zero 
         y_seq = []; logp = 0
         for i in x:
@@ -103,14 +104,16 @@ class Transducer(nn.Module):
         return y_seq, -logp
 
 
-    def beam_search(self, xs, W=10, prefix=True):
+    def beam_search(self, xs, W=10, prefix=False):
         '''''
         `xs`: acoustic model outputs
         NOTE only support one sequence (batch size = 1)
         '''''
+        use_gpu = xs.is_cuda
         def forward_step(label, hidden):
             ''' `label`: int '''
             label = autograd.Variable(torch.LongTensor([label]), volatile=True).view(1,1)
+            if use_gpu: label = label.cuda()
             label = self.embed(label)
             pred, hidden = self.decoder(label, hidden)
             return pred[0][0], hidden
@@ -155,7 +158,7 @@ class Transducer(nn.Module):
                 pred, hidden = forward_step(y_hat.k[-1], y_hat.h)
                 ytu = self.joint(x, pred)
                 logp = F.log_softmax(ytu, dim=0) # log probability for each k
-                # for k \in vocab
+                # TODO only use topk vocab
                 for k in range(self.vocab_size):
                     yk = Sequence(y_hat)
                     yk.logp += float(logp[k])
