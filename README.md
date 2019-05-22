@@ -20,12 +20,12 @@ python train_ctc.py --lr 1e-3 --bi --dropout 0.5 --out exp/ctc_bi_lr1e-3 --sched
 
 * Train RNNT joint model
 ```
-python train_rnnt.py <parameters> --initam <path to best CTC model> --schedule
+python train_rnnt.py --lr 4e-4 --bi --dropout 0.5 --out exp/rnnt_bi_lr4e-4 --schedule
 ```
 
 * Decode 
 ```
-python eval.py <path to best model> --ctc --bi --beam 100
+python eval.py <path to best model> [--ctc] --bi
 ```
 
 ## Results
