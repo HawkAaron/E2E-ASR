@@ -79,10 +79,6 @@ class Transducer(nn.Module):
         if ys.is_cuda:
             xlen = xlen.cuda()
             ylen = ylen.cuda()
-        else:
-            out = F.log_softmax(out, dim=3)
-            # NOTE loss function need flatten label
-            ys = torch.cat([ys[i, :j] for i, j in enumerate(ylen.data)], dim=0).cpu()
         loss = self.loss(out, ys.int(), xlen, ylen)
         return loss
 
